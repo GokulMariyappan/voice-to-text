@@ -32,6 +32,16 @@ def get_stt_model():
 def get_model_id() -> str:
     return llm_model
 
+def parse_json_object(raw_text: str) -> dict[str, Any]:
+    raw_text = raw_text.strip()
+    if raw_text.startswith("```json"):
+        raw_text = raw_text[7:]
+    if raw_text.startswith("```"):
+        raw_text = raw_text[3:]
+    if raw_text.endswith("```"):
+        raw_text = raw_text[:-3]
+    raw_text = raw_text.strip()
+
     try:
         obj = json.loads(raw_text)
         if isinstance(obj, list) and len(obj) > 0 and isinstance(obj[0], dict):
@@ -70,6 +80,7 @@ def transcribe_audio_file(file_path: str, filename: str) -> str:
     )
     return result.get("text", "").strip()
 
+def extract_symptoms_and_candidates(transcript: str) -> dict[str, Any]:
     system_prompt = """
 You are a medical intake and preliminary triage assistant.
 Step 1: Extract only what the patient explicitly states or strongly implies.
