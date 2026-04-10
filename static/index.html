@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice Symptom Checker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">AI Medical Triage</p>
+        <h1>Describe symptoms by voice and get evidence-grounded insights.</h1>
+        <p class="lede">
+          Powered by Google’s Gemini 2.0 Flash, providing state-of-the-art symptom extraction and multimodal audio processing validated against official medical databases.
+        </p>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>Live Recording</h2>
+          <p class="status">Use your microphone to record symptoms live.</p>
+          <div class="button-row">
+            <button id="startRecord" type="button">Start Recording</button>
+            <button id="stopRecord" type="button" disabled>Stop</button>
+            <button id="transcribeRecording" type="button" disabled>Transcribe</button>
+          </div>
+          <p id="recordingStatus" class="status">Recorder ready.</p>
+          <audio id="recordingPreview" controls hidden></audio>
+        </section>
+
+        <section class="panel">
+          <h2>Upload Audio</h2>
+          <p class="status">Already have a recording? Upload it here.</p>
+          <input id="audioFile" type="file" accept="audio/*" />
+          <div class="button-row">
+            <button id="transcribeUpload" type="button">Transcribe Upload</button>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Transcript</h2>
+          <button id="analyzeText" type="button">Analyze Symptoms</button>
+        </div>
+        <textarea
+          id="transcript"
+          placeholder="Your transcript will appear here. You can also paste text manually."
+        ></textarea>
+        <p id="apiStatus" class="status"></p>
+      </section>
+
+      <div class="grid">
+        <article class="panel">
+          <h2>Extracted Symptoms</h2>
+          <pre id="symptomsOutput">No analysis yet.</pre>
+        </article>
+
+        <article class="panel">
+          <h2>Predicted Conditions</h2>
+          <pre id="analysisOutput">No analysis yet.</pre>
+        </article>
+      </div>
+
+      <section class="panel">
+        <h2>Official Sources & Evidence</h2>
+        <div id="sourcesOutput" class="sources">No sources yet.</div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
