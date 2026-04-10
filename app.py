@@ -61,7 +61,11 @@ def llm_json(system_prompt: str, user_prompt: str, model_id: str | None = None) 
 def transcribe_audio_file(file_path: str, filename: str) -> str:
     # Whisper handles multiple formats (mp3, wav, webm, etc.) and languages (Hindi, Kannada, English) automatically.
     # No need to manually determine MIME types or send bytes; Whisper takes the file path.
-    result = stt_model.transcribe(file_path)
+    result = stt_model.transcribe(
+        file_path,
+        task="translate",
+        fp16=False          
+    )
     return result.get("text", "").strip()
 
 def extract_symptoms(transcript: str) -> dict[str, Any]:

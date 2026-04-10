@@ -1,0 +1,48 @@
+Katha Voice-to-Text Documentation
+====================================
+
+Base URL: http://localhost:5000
+
+------------------------------------
+1. Audio Transcription
+------------------------------------
+Endpoint: /api/transcribe
+Method: POST
+Request Body (form-data):
+  - audio: [Binary audio file] (supports .wav, .mp3, .webm, etc.)
+
+Response (JSON):
+  {
+    "transcript": "Transcribed text in English, Hindi, or Kannada"
+  }
+
+------------------------------------
+2. Symptom Analysis
+------------------------------------
+Endpoint: /api/analyze
+Method: POST
+Request Body (JSON):
+  {
+    "text": "The patient transcript for analysis"
+  }
+
+Response (JSON):
+  {
+    "transcript": "...",
+    "symptoms": { ... },
+    "candidate_conditions": { ... },
+    "evidence": { ... },
+    "analysis": {
+       "predictions": [...],
+       "triage_advice": "...",
+       "emergency_warning": "..."
+    },
+    "disclaimer": "..."
+  }
+
+------------------------------------
+3. Health Check
+------------------------------------
+Endpoint: /api/health
+Method: GET
+Response: {"ok": true}
