@@ -172,12 +172,14 @@ analyzeTextButton.addEventListener("click", async () => {
     analysisOutput.textContent = "Loading...";
     sourcesOutput.innerHTML = "Loading...";
 
+    console.log("Starting analysis for text:", text);
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
     const payload = await response.json();
+    console.log("Analysis payload received:", payload);
 
     if (!response.ok) throw new Error(payload.error || "Analysis failed.");
 

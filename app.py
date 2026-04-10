@@ -17,34 +17,35 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
 # Initialize Ollama Client
 ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-llm_model = os.getenv("LLM_MODEL", "qwen2.5")
+llm_model = os.getenv("LLM_MODEL", "qwen2.5:3b")
 
-# Initialize Whisper Model (Multilingual V2T)
-whisper_model_name = os.getenv("WHISPER_MODEL", "base")
-# Loading the model globally to avoid reloading on every request
-stt_model = whisper.load_model(whisper_model_name)
+# Global Whisper model placeholder
+stt_model = None
+
+def get_stt_model():
+    global stt_model
+    if stt_model is None:
+        whisper_model_name = os.getenv("WHISPER_MODEL", "base")
+        stt_model = whisper.load_model(whisper_model_name)
+    return stt_model
 
 def get_model_id() -> str:
     return llm_model
 
-def parse_json_object(raw_text: str) -> dict[str, Any]:
-    raw_text = raw_text.strip()
-    if raw_text.startswith("```json"):
-        raw_text = raw_text[7:]
-    if raw_text.startswith("```"):
-        raw_text = raw_text[3:]
-    if raw_text.endswith("```"):
-        raw_text = raw_text[:-3]
-    raw_text = raw_text.strip()
-    
     try:
-        return json.loads(raw_text)
+        obj = json.loads(raw_text)
+        if isinstance(obj, list) and len(obj) > 0 and isinstance(obj[0], dict):
+            return obj[0]
+        return obj if isinstance(obj, dict) else {}
     except json.JSONDecodeError:
         start = raw_text.find("{")
         end = raw_text.rfind("}")
         if start == -1 or end == -1:
-            raise
-        return json.loads(raw_text[start : end + 1])
+            return {}
+        try:
+            return json.loads(raw_text[start : end + 1])
+        except:
+            return {}
 
 def llm_json(system_prompt: str, user_prompt: str, model_id: str | None = None) -> dict[str, Any]:
     response = ollama.chat(
@@ -61,45 +62,34 @@ def llm_json(system_prompt: str, user_prompt: str, model_id: str | None = None) 
 def transcribe_audio_file(file_path: str, filename: str) -> str:
     # Whisper handles multiple formats (mp3, wav, webm, etc.) and languages (Hindi, Kannada, English) automatically.
     # No need to manually determine MIME types or send bytes; Whisper takes the file path.
-    result = stt_model.transcribe(
+    stt = get_stt_model()
+    result = stt.transcribe(
         file_path,
         task="translate",
         fp16=False          
     )
     return result.get("text", "").strip()
 
-def extract_symptoms(transcript: str) -> dict[str, Any]:
     system_prompt = """
-You are a medical intake extraction assistant.
-Extract only what the patient explicitly states or strongly implies.
-Return compact JSON with:
+You are a medical intake and preliminary triage assistant.
+Step 1: Extract only what the patient explicitly states or strongly implies.
+Step 2: Create a preliminary differential diagnosis list from these symptoms.
+
+Return exactly one flat JSON object (not a list) with:
 - patient_summary: string
 - symptoms: array of objects with name, duration, severity, body_part, notes
 - risk_flags: array of strings
 - missing_details: array of strings
-Do not diagnose. Do not add facts not present in the transcript.
-"""
-    return llm_json(system_prompt, transcript)
+- candidate_conditions: array of objects with name and why_considered
 
-def generate_candidate_conditions(symptom_data: dict[str, Any], transcript: str) -> dict[str, Any]:
-    system_prompt = """
-You create a preliminary differential diagnosis list from symptom descriptions.
-Return JSON with:
-- candidates: array of objects with name and why_considered
 Rules:
-- Keep to 3 to 6 common conditions.
+- Output only valid JSON.
+- Do not diagnose. Do not add facts not present in the transcript.
+- Keep to 3 to 6 common conditions in candidate_conditions.
 - Use generic disease names, not long prose.
 - Do not claim certainty.
-- This is only a candidate list before evidence validation.
 """
-    user_prompt = json.dumps(
-        {
-            "transcript": transcript,
-            "symptom_extraction": symptom_data,
-        },
-        ensure_ascii=True,
-    )
-    return llm_json(system_prompt, user_prompt)
+    return llm_json(system_prompt, f"Patient Transcript: {transcript}")
 
 def pubmed_evidence(symptoms: list[dict[str, Any]], max_results: int = 5) -> list[dict[str, Any]]:
     symptom_terms = [item.get("name", "").strip() for item in symptoms if item.get("name")]
@@ -138,7 +128,8 @@ def pubmed_evidence(symptoms: list[dict[str, Any]], max_results: int = 5) -> lis
             timeout=20,
         )
         summary_response.raise_for_status()
-        result = summary_response.json().get("result", {})
+        summary_payload = summary_response.json()
+        result = summary_payload.get("result", {}) if isinstance(summary_payload, dict) else {}
     except requests.RequestException:
         return []
 
@@ -260,7 +251,7 @@ def build_grounded_predictions(
     system_prompt = """
 You are a clinical triage assistant.
 Use only the provided patient transcript, extracted symptoms, PubMed evidence metadata, and validated condition records from official NCBI/NLM sources.
-Return JSON with:
+Return exactly one JSON object (not a list) with:
 - predictions: array of objects with name, confidence_label, matching_symptoms, why_it_fits, why_it_may_not_fit, official_sources
 - triage_advice: string
 - emergency_warning: string
@@ -270,6 +261,7 @@ Rules:
 - Keep predictions to at most 3.
 - Mention uncertainty plainly.
 - Encourage urgent care if severe red-flag symptoms are present.
+- Output only valid JSON.
 """
     user_prompt = json.dumps(
         {
@@ -284,8 +276,20 @@ Rules:
     return llm_json(system_prompt, user_prompt)
 
 def analyze_text(transcript: str) -> dict[str, Any]:
-    symptom_data = extract_symptoms(transcript)
-    candidate_data = generate_candidate_conditions(symptom_data, transcript)
+    # Phase 1: Consolidated LLM Call
+    full_data = extract_symptoms_and_candidates(transcript)
+    if not isinstance(full_data, dict):
+        full_data = {}
+        
+    symptom_data = {
+        "patient_summary": full_data.get("patient_summary", "Summary unavailable."),
+        "symptoms": full_data.get("symptoms", []),
+        "risk_flags": full_data.get("risk_flags", []),
+        "missing_details": full_data.get("missing_details", [])
+    }
+    candidate_data = {"candidates": full_data.get("candidate_conditions", [])}
+    
+    # Phase 2: Evidence Gathering
     pubmed_items = pubmed_evidence(symptom_data.get("symptoms", []))
     source_warnings = []
 
@@ -293,7 +297,8 @@ def analyze_text(transcript: str) -> dict[str, Any]:
         source_warnings.append("PubMed evidence was unavailable or no matching articles were found.")
 
     validated_conditions = []
-    for candidate in candidate_data.get("candidates", []):
+    # Limit number of candidates to check to avoid excessive API calls and timeouts
+    for candidate in candidate_data.get("candidates", [])[:4]: 
         name = candidate.get("name")
         if not name:
             continue
@@ -316,8 +321,9 @@ def analyze_text(transcript: str) -> dict[str, Any]:
         )
 
     if not validated_conditions:
-        source_warnings.append("NLM condition validation returned no direct matches, so the response may rely more heavily on the symptom transcript and PubMed evidence.")
+        source_warnings.append("NLM condition validation returned no direct matches.")
 
+    # Phase 3: Final grounded prediction
     grounded = build_grounded_predictions(
         transcript=transcript,
         symptom_data=symptom_data,
